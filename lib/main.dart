@@ -23,11 +23,11 @@ class MainApp extends StatelessWidget {
         ),
         GoRoute(
           path: '/edit/:id',
-          builder: (context, state) => EditPage(frameId: state.pathParameters['id']!),
+          builder: (context, state) => EditPage(frameId: Uri.decodeComponent(state.pathParameters['id']!)),
         ),
         GoRoute(
           path: '/preview/:id',
-          builder: (context, state) => PreviewPage(frameId: state.pathParameters['id']!),
+          builder: (context, state) => PreviewPage(frameId: Uri.decodeComponent(state.pathParameters['id']!)),
         ),
       ],
     );

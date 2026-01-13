@@ -46,6 +46,6 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app needs access to photo library to save exported images.</string>
+	<string>This app needs access to photo library to import images and save exported images.</string>
 </dict>
 </plist>

@@ -29,34 +29,11 @@ class HomePage extends ConsumerWidget {
         itemBuilder: (context, index) {
           final frame = frames[index];
           return GestureDetector(
-            onTap: () => context.go('/edit/${frame.id}'),
+            onTap: () => context.go('/edit/${Uri.encodeComponent(frame.id)}'),
             child: Card(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: SvgPicture.string(
-                      frame.svgString,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Text(
-                      frame.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () => context.go('/edit/${frame.id}'),
-                      ),
-                    ],
-                  ),
-                ],
+              child: SvgPicture.string(
+                frame.svgString,
+                fit: BoxFit.contain,
               ),
             ),
           );
@@ -71,6 +48,7 @@ class HomePage extends ConsumerWidget {
             final newFrame = await repository.importFromGallery();
             ref.read(framesProvider.notifier).addFrame(newFrame);
           } catch (e) {
+            if (!context.mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Import failed: $e')));
           }
         },

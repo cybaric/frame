@@ -1,4 +1,4 @@
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show rootBundle, AssetManifest;
 import 'package:image_picker/image_picker.dart';
 import 'package:xml/xml.dart';
 
@@ -12,34 +12,43 @@ class SvgRepositoryImpl implements SvgRepository {
   Future<List<Frame>> getAllFrames() async {
     final frames = <Frame>[];
 
-    // Load drawing.svg
-    try {
-      final svg1 = await rootBundle.loadString('assets/drawing.svg');
-      final pathColors1 = _parsePathColors(svg1);
-      frames.add(Frame(id: '1', name: 'Drawing Frame', svgString: svg1, pathColors: pathColors1));
-    } catch (e) {
-      // Handle error
-    }
+    // Read assets from Flutter's AssetManifest (works across build modes and platforms)
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    final allAssets = manifest.listAssets();
 
-    // Load frame1.svg
-    try {
-      final svg2 = await rootBundle.loadString('assets/frame1.svg');
-      final pathColors2 = _parsePathColors(svg2);
-      frames.add(Frame(id: '2', name: 'Rectangle Frame', svgString: svg2, pathColors: pathColors2));
-    } catch (e) {
-      // Handle error
-    }
+    final svgAssets = allAssets.where((k) => k.startsWith('assets/') && k.toLowerCase().endsWith('.svg')).toList()..sort();
 
-    // Load frame2.svg
-    try {
-      final svg3 = await rootBundle.loadString('assets/frame2.svg');
-      final pathColors3 = _parsePathColors(svg3);
-      frames.add(Frame(id: '3', name: 'Diamond Frame', svgString: svg3, pathColors: pathColors3));
-    } catch (e) {
-      // Handle error
+    for (final assetPath in svgAssets) {
+      try {
+        final svgString = await rootBundle.loadString(assetPath);
+        final pathColors = _parsePathColors(svgString);
+        frames.add(
+          Frame(
+            id: assetPath,
+            name: _nameFromAssetPath(assetPath),
+            svgString: svgString,
+            pathColors: pathColors,
+          ),
+        );
+      } catch (e) {
+        // Handle error
+      }
     }
 
     return frames;
+  }
+
+  String _nameFromAssetPath(String assetPath) {
+    final file = assetPath.split('/').last;
+    final base = file.toLowerCase().endsWith('.svg') ? file.substring(0, file.length - 4) : file;
+    // simple title-case-ish
+    final withSpaces = base.replaceAll(RegExp(r'[_\-]+'), ' ');
+    if (withSpaces.isEmpty) return 'Frame';
+    return withSpaces
+        .split(' ')
+        .where((p) => p.isNotEmpty)
+        .map((p) => p[0].toUpperCase() + p.substring(1))
+        .join(' ');
   }
 
   Map<String, String> _parsePathColors(String svgString) {
