@@ -86,12 +86,7 @@ class _EditPageState extends ConsumerState<EditPage> {
       }
 
       final bytes = await picked.readAsBytes();
-      ref.read(imageEditStateProvider.notifier).state = const ImageEditState(
-        bytes: null,
-        offset: Offset.zero,
-        scale: 1.0,
-        rotation: 0.0,
-      ).copyWith(bytes: bytes);
+      ref.read(imageLayersProvider.notifier).addLayer(bytes);
       if (!mounted) return;
       setState(() {
         _isImportingImage = false;
@@ -109,19 +104,14 @@ class _EditPageState extends ConsumerState<EditPage> {
   }
 
   void _resetImageTransform() {
-    final current = ref.read(imageEditStateProvider);
-    ref.read(imageEditStateProvider.notifier).state = current.copyWith(
-      offset: Offset.zero,
-      scale: 1.0,
-      rotation: 0.0,
-    );
+    ref.read(imageLayersProvider.notifier).resetActiveTransform();
   }
 
   void _removeImportedImage() {
-    final current = ref.read(imageEditStateProvider);
-    ref.read(imageEditStateProvider.notifier).state = current.copyWith(clearBytes: true);
+    ref.read(imageLayersProvider.notifier).removeActiveLayer();
     setState(() {
-      _editMode = EditMode.frame;
+      final state = ref.read(imageLayersProvider);
+      _editMode = state.layers.isEmpty ? EditMode.frame : EditMode.image;
     });
   }
 
@@ -223,8 +213,13 @@ class _EditPageState extends ConsumerState<EditPage> {
   Widget build(BuildContext context) {
     final framesAsync = ref.watch(framesProvider);
     final editUseCase = ref.watch(editColorUseCaseProvider);
-    final imageEditState = ref.watch(imageEditStateProvider);
-    final importedImageBytes = imageEditState.bytes;
+    final imageLayersState = ref.watch(imageLayersProvider);
+    final activeLayer = imageLayersState.activeLayer;
+
+    const accent = Color(0xFF38BDF8);
+    const accent2 = Color(0xFFA78BFA);
+    const surface = Color(0xFF0F172A);
+    const inactive = Color(0xFF94A3B8);
 
     return framesAsync.when(
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
@@ -233,31 +228,46 @@ class _EditPageState extends ConsumerState<EditPage> {
         final frame = frames.firstWhere((f) => f.id == widget.frameId);
 
         final exportSpec = _tryParseExportSpec(frame.svgString);
-        return Scaffold(
-          appBar: AppBar(
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => context.go('/'),
-            ),
-            title: Text('Edit ${frame.name}'),
-            actions: [
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'export') {
-                    _exportToPng(context, frame);
-                  } else if (value == 'import') {
-                    _importImage(context);
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'export', child: Text('Export')),
-                  const PopupMenuItem(value: 'import', child: Text('Import Image')),
-                ],
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            context.go('/');
+          },
+          child: Scaffold(
+            appBar: AppBar(
+              backgroundColor: surface,
+              foregroundColor: Colors.white,
+              titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
+              iconTheme: const IconThemeData(color: Colors.white),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => context.go('/'),
               ),
-            ],
-          ),
-          body: Column(
-            children: [
+              title: Text('Edit ${frame.name}'),
+              actions: [
+                PopupMenuButton<String>(
+                  iconColor: accent,
+                  onSelected: (value) {
+                    if (value == 'export') {
+                      _exportToPng(context, frame);
+                    } else if (value == 'import') {
+                      _importImage(context);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: 'export', child: Text('Export')),
+                    const PopupMenuItem(value: 'import', child: Text('Import Image')),
+                  ],
+                ),
+              ],
+            ),
+            body: Column(
+              children: [
               Expanded(
                 child: Center(
                   child: AspectRatio(
@@ -267,10 +277,7 @@ class _EditPageState extends ConsumerState<EditPage> {
                       child: _isExporting
                           ? _ExportCanvas(
                               svgString: frame.svgString,
-                              importedImageBytes: importedImageBytes,
-                              imageOffset: imageEditState.offset,
-                              imageScale: imageEditState.scale,
-                              imageRotation: imageEditState.rotation,
+                              layers: imageLayersState.layers,
                               exportSpec: exportSpec,
                             )
                           : CustomPaint(
@@ -278,27 +285,17 @@ class _EditPageState extends ConsumerState<EditPage> {
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
-                                  if (importedImageBytes != null)
+                                  for (final layer in imageLayersState.layers)
                                     ClipRect(
                                       child: Center(
                                         child: Transform(
                                           alignment: Alignment.center,
                                           transform: Matrix4.identity()
-                                            ..translateByDouble(
-                                              imageEditState.offset.dx,
-                                              imageEditState.offset.dy,
-                                              0.0,
-                                              1.0,
-                                            )
-                                            ..rotateZ(imageEditState.rotation)
-                                            ..scaleByDouble(
-                                              imageEditState.scale,
-                                              imageEditState.scale,
-                                              1.0,
-                                              1.0,
-                                            ),
+                                            ..translateByDouble(layer.offset.dx, layer.offset.dy, 0.0, 1.0)
+                                            ..rotateZ(layer.rotation)
+                                            ..scaleByDouble(layer.scale, layer.scale, 1.0, 1.0),
                                           child: Image.memory(
-                                            importedImageBytes,
+                                            layer.bytes,
                                             fit: BoxFit.contain,
                                           ),
                                         ),
@@ -308,7 +305,7 @@ class _EditPageState extends ConsumerState<EditPage> {
                                     frame.svgString,
                                     fit: BoxFit.contain,
                                   ),
-                                  if (!_isImportingImage && importedImageBytes != null && _editMode == EditMode.image)
+                                  if (!_isImportingImage && activeLayer != null && _editMode == EditMode.image)
                                     Positioned.fill(
                                       child: Builder(
                                         builder: (context) {
@@ -319,7 +316,8 @@ class _EditPageState extends ConsumerState<EditPage> {
                                               final localFocal = box == null
                                                   ? details.focalPoint
                                                   : box.globalToLocal(details.focalPoint);
-                                              final current = ref.read(imageEditStateProvider);
+                                              final current = ref.read(imageLayersProvider).activeLayer;
+                                              if (current == null) return;
                                               setState(() {
                                                 _startFocalPoint = localFocal;
                                                 _baseOffset = current.offset;
@@ -336,12 +334,11 @@ class _EditPageState extends ConsumerState<EditPage> {
                                               final updatedOffset = _baseOffset + delta;
                                               final updatedScale = (_baseScale * details.scale).clamp(0.2, 10.0);
                                               final updatedRotation = _baseRotation + details.rotation;
-                                              final current = ref.read(imageEditStateProvider);
-                                              ref.read(imageEditStateProvider.notifier).state = current.copyWith(
-                                                offset: updatedOffset,
-                                                scale: updatedScale,
-                                                rotation: updatedRotation,
-                                              );
+                                              ref.read(imageLayersProvider.notifier).updateActiveTransform(
+                                                    offset: updatedOffset,
+                                                    scale: updatedScale,
+                                                    rotation: updatedRotation,
+                                                  );
                                             },
                                           );
                                         },
@@ -367,36 +364,82 @@ class _EditPageState extends ConsumerState<EditPage> {
               Expanded(
                 child: _editMode == EditMode.image
                     ? Center(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        child: Column(
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.palette),
-                              onPressed: () {
-                                setState(() {
-                                  _editMode = EditMode.frame;
-                                });
-                              },
-                              color: _editMode == EditMode.frame ? Theme.of(context).colorScheme.primary : null,
+                            Expanded(
+                              child: ReorderableListView.builder(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                itemCount: imageLayersState.layers.length,
+                                onReorder: (oldIndex, newIndex) {
+                                  ref.read(imageLayersProvider.notifier).reorder(oldIndex, newIndex);
+                                },
+                                itemBuilder: (context, index) {
+                                  final layer = imageLayersState.layers[index];
+                                  final isActive = layer.id == imageLayersState.activeLayerId;
+                                  return ListTile(
+                                    key: ValueKey(layer.id),
+                                    onTap: () => ref.read(imageLayersProvider.notifier).setActive(layer.id),
+                                    leading: Icon(
+                                      isActive ? Icons.check_circle : Icons.circle_outlined,
+                                      color: isActive ? accent : inactive,
+                                    ),
+                                    title: Text(
+                                      'Gambar ${index + 1}',
+                                      style: TextStyle(
+                                        color: isActive ? Colors.white : const Color(0xFFE2E8F0),
+                                        fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      isActive ? 'Aktif' : 'Ketuk untuk pilih',
+                                      style: TextStyle(color: inactive.withValues(alpha: 0.9)),
+                                    ),
+                                    trailing: Icon(Icons.drag_handle, color: inactive.withValues(alpha: 0.9)),
+                                  );
+                                },
+                              ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.image_outlined),
-                              onPressed: importedImageBytes == null
-                                  ? null
-                                  : () {
-                                      setState(() {
-                                        _editMode = EditMode.image;
-                                      });
-                                    },
-                              color: _editMode == EditMode.image ? Theme.of(context).colorScheme.primary : null,
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.refresh),
-                              onPressed: importedImageBytes == null ? null : _resetImageTransform,
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: importedImageBytes == null ? null : _removeImportedImage,
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.palette),
+                                  onPressed: () {
+                                    setState(() {
+                                      _editMode = EditMode.frame;
+                                    });
+                                  },
+                                  color: _editMode == EditMode.frame ? accent2 : inactive,
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.image_outlined),
+                                  onPressed: imageLayersState.layers.isEmpty
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            _editMode = EditMode.image;
+                                          });
+                                        },
+                                  color: _editMode == EditMode.image ? accent : inactive,
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                                  onPressed: _isImportingImage ? null : () => _importImage(context),
+                                  color: _isImportingImage ? inactive.withValues(alpha: 0.45) : accent2,
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.refresh),
+                                  onPressed: activeLayer == null ? null : _resetImageTransform,
+                                  color: activeLayer == null ? inactive.withValues(alpha: 0.45) : accent,
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  onPressed: activeLayer == null ? null : _removeImportedImage,
+                                  color: activeLayer == null
+                                      ? inactive.withValues(alpha: 0.45)
+                                      : const Color(0xFFFB7185),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -413,18 +456,18 @@ class _EditPageState extends ConsumerState<EditPage> {
                                     _editMode = EditMode.frame;
                                   });
                                 },
-                                color: _editMode == EditMode.frame ? Theme.of(context).colorScheme.primary : null,
+                                color: _editMode == EditMode.frame ? accent2 : inactive,
                               ),
                               IconButton(
                                 icon: const Icon(Icons.image_outlined),
-                                onPressed: importedImageBytes == null
+                                onPressed: imageLayersState.layers.isEmpty
                                     ? null
                                     : () {
                                         setState(() {
                                           _editMode = EditMode.image;
                                         });
                                       },
-                                color: _editMode == EditMode.image ? Theme.of(context).colorScheme.primary : null,
+                                color: _editMode == EditMode.image ? accent : inactive,
                               ),
                             ],
                           ),
@@ -441,6 +484,14 @@ class _EditPageState extends ConsumerState<EditPage> {
                                     await showDialog(
                                       context: context,
                                       builder: (context) => AlertDialog(
+                                        backgroundColor: const Color(0xFF0F172A),
+                                        titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                        contentTextStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                              color: const Color(0xFFE2E8F0),
+                                            ),
                                         title: const Text('Pick a color'),
                                         content: SingleChildScrollView(
                                           child: ColorPicker(
@@ -450,10 +501,16 @@ class _EditPageState extends ConsumerState<EditPage> {
                                         ),
                                         actions: [
                                           TextButton(
+                                            style: TextButton.styleFrom(
+                                              foregroundColor: const Color(0xFF94A3B8),
+                                            ),
                                             child: const Text('Cancel'),
                                             onPressed: () => Navigator.of(context).pop(),
                                           ),
                                           TextButton(
+                                            style: TextButton.styleFrom(
+                                              foregroundColor: const Color(0xFF38BDF8),
+                                            ),
                                             child: const Text('Select'),
                                             onPressed: () {
                                               final argb = pickedColor.toARGB32();
@@ -486,6 +543,7 @@ class _EditPageState extends ConsumerState<EditPage> {
                       ),
               ),
             ],
+            ),
           ),
         );
       },
@@ -605,18 +663,12 @@ class _SvgWindowClipper extends CustomClipper<Path> {
 
 class _ExportCanvas extends StatelessWidget {
   final String svgString;
-  final Uint8List? importedImageBytes;
-  final Offset imageOffset;
-  final double imageScale;
-  final double imageRotation;
+  final List<ImageLayer> layers;
   final _ExportSpec? exportSpec;
 
   const _ExportCanvas({
     required this.svgString,
-    required this.importedImageBytes,
-    required this.imageOffset,
-    required this.imageScale,
-    required this.imageRotation,
+    required this.layers,
     required this.exportSpec,
   });
 
@@ -627,22 +679,28 @@ class _ExportCanvas extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (importedImageBytes != null)
+          if (layers.isNotEmpty)
             ClipPath(
               clipper: _SvgWindowClipper(spec),
               clipBehavior: Clip.antiAlias,
-              child: Center(
-                child: Transform(
-                  alignment: Alignment.center,
-                  transform: Matrix4.identity()
-                    ..translateByDouble(imageOffset.dx, imageOffset.dy, 0.0, 1.0)
-                    ..rotateZ(imageRotation)
-                    ..scaleByDouble(imageScale, imageScale, 1.0, 1.0),
-                  child: Image.memory(
-                    importedImageBytes!,
-                    fit: BoxFit.contain,
-                  ),
-                ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  for (final layer in layers)
+                    Center(
+                      child: Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.identity()
+                          ..translateByDouble(layer.offset.dx, layer.offset.dy, 0.0, 1.0)
+                          ..rotateZ(layer.rotation)
+                          ..scaleByDouble(layer.scale, layer.scale, 1.0, 1.0),
+                        child: Image.memory(
+                          layer.bytes,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           SvgPicture.string(
@@ -682,23 +740,61 @@ class _ExportOptionsDialogState extends State<ExportOptionsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    const accent = Color(0xFF38BDF8);
+    const accent2 = Color(0xFFA78BFA);
+    const surface = Color(0xFF0F172A);
+    const border = Color(0xFF334155);
+    const text = Color(0xFFE2E8F0);
+
     return AlertDialog(
+      backgroundColor: surface,
+      titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+      contentTextStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: text,
+          ),
       title: const Text('Export Options'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             controller: _nameController,
-            decoration: const InputDecoration(
+            style: const TextStyle(color: Colors.white),
+            cursorColor: accent,
+            decoration: InputDecoration(
               labelText: 'File Name',
               hintText: 'Enter file name',
+              labelStyle: const TextStyle(color: text),
+              hintStyle: TextStyle(color: text.withValues(alpha: 0.6)),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: accent, width: 1.5),
+              ),
             ),
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<ExportQuality>(
             initialValue: _selectedQuality,
-            decoration: const InputDecoration(
+            dropdownColor: surface,
+            iconEnabledColor: accent2,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
               labelText: 'Quality',
+              labelStyle: const TextStyle(color: text),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: accent2, width: 1.5),
+              ),
             ),
             items: ExportQuality.values.map((quality) {
               String label;
@@ -715,7 +811,10 @@ class _ExportOptionsDialogState extends State<ExportOptionsDialog> {
               }
               return DropdownMenuItem(
                 value: quality,
-                child: Text(label),
+                child: Text(
+                  label,
+                  style: const TextStyle(color: Colors.white),
+                ),
               );
             }).toList(),
             onChanged: (value) {
@@ -730,10 +829,12 @@ class _ExportOptionsDialogState extends State<ExportOptionsDialog> {
       ),
       actions: [
         TextButton(
+          style: TextButton.styleFrom(foregroundColor: const Color(0xFF94A3B8)),
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
         TextButton(
+          style: TextButton.styleFrom(foregroundColor: accent),
           onPressed: () {
             Navigator.of(context).pop({
               'name': _nameController.text.trim().isEmpty ? widget.defaultName : _nameController.text.trim(),

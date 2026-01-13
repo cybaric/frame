@@ -35,6 +35,19 @@ class MainApp extends StatelessWidget {
 
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF0B1220),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: const Color(0xFF0F172A),
+          contentTextStyle: const TextStyle(color: Color(0xFFE2E8F0)),
+          actionTextColor: const Color(0xFF38BDF8),
+          behavior: SnackBarBehavior.floating,
+          elevation: 8,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
       routerConfig: router,
     );
   }
