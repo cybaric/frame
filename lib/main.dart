@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'presentation/pages/home_page.dart';
 import 'presentation/pages/edit_page.dart';
-import 'presentation/pages/preview_page.dart';
+import 'presentation/pages/splash_page.dart';
 
 void main() {
   runApp(const ProviderScope(child: MainApp()));
@@ -16,7 +16,12 @@ class MainApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final router = GoRouter(
+      initialLocation: '/splash',
       routes: [
+        GoRoute(
+          path: '/splash',
+          builder: (context, state) => const SplashPage(),
+        ),
         GoRoute(
           path: '/',
           builder: (context, state) => const HomePage(),
@@ -25,14 +30,11 @@ class MainApp extends StatelessWidget {
           path: '/edit/:id',
           builder: (context, state) => EditPage(frameId: Uri.decodeComponent(state.pathParameters['id']!)),
         ),
-        GoRoute(
-          path: '/preview/:id',
-          builder: (context, state) => PreviewPage(frameId: Uri.decodeComponent(state.pathParameters['id']!)),
-        ),
       ],
     );
 
-    return MaterialApp.router(debugShowCheckedModeBanner: false,
+    return MaterialApp.router(
+      debugShowCheckedModeBanner: false,
       routerConfig: router,
     );
   }

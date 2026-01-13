@@ -14,8 +14,7 @@ import 'package:xml/xml.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../providers/frame_provider.dart';
-
-final importedImageBytesProvider = StateProvider<Uint8List?>((ref) => null);
+import '../providers/image_edit_provider.dart';
 
 enum EditMode { frame, image }
 
@@ -65,10 +64,6 @@ class _EditPageState extends ConsumerState<EditPage> {
     return null;
   }
 
-  Offset _imageOffset = Offset.zero;
-  double _imageScale = 1.0;
-  double _imageRotation = 0.0;
-
   Offset _startFocalPoint = Offset.zero;
   Offset _baseOffset = Offset.zero;
   double _baseScale = 1.0;
@@ -91,14 +86,16 @@ class _EditPageState extends ConsumerState<EditPage> {
       }
 
       final bytes = await picked.readAsBytes();
-      ref.read(importedImageBytesProvider.notifier).state = bytes;
+      ref.read(imageEditStateProvider.notifier).state = const ImageEditState(
+        bytes: null,
+        offset: Offset.zero,
+        scale: 1.0,
+        rotation: 0.0,
+      ).copyWith(bytes: bytes);
       if (!mounted) return;
       setState(() {
         _isImportingImage = false;
         _editMode = EditMode.image;
-        _imageOffset = Offset.zero;
-        _imageScale = 1.0;
-        _imageRotation = 0.0;
       });
     } catch (e) {
       if (!context.mounted) return;
@@ -112,20 +109,19 @@ class _EditPageState extends ConsumerState<EditPage> {
   }
 
   void _resetImageTransform() {
-    setState(() {
-      _imageOffset = Offset.zero;
-      _imageScale = 1.0;
-      _imageRotation = 0.0;
-    });
+    final current = ref.read(imageEditStateProvider);
+    ref.read(imageEditStateProvider.notifier).state = current.copyWith(
+      offset: Offset.zero,
+      scale: 1.0,
+      rotation: 0.0,
+    );
   }
 
   void _removeImportedImage() {
-    ref.read(importedImageBytesProvider.notifier).state = null;
+    final current = ref.read(imageEditStateProvider);
+    ref.read(imageEditStateProvider.notifier).state = current.copyWith(clearBytes: true);
     setState(() {
       _editMode = EditMode.frame;
-      _imageOffset = Offset.zero;
-      _imageScale = 1.0;
-      _imageRotation = 0.0;
     });
   }
 
@@ -227,7 +223,8 @@ class _EditPageState extends ConsumerState<EditPage> {
   Widget build(BuildContext context) {
     final framesAsync = ref.watch(framesProvider);
     final editUseCase = ref.watch(editColorUseCaseProvider);
-    final importedImageBytes = ref.watch(importedImageBytesProvider);
+    final imageEditState = ref.watch(imageEditStateProvider);
+    final importedImageBytes = imageEditState.bytes;
 
     return framesAsync.when(
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
@@ -248,15 +245,12 @@ class _EditPageState extends ConsumerState<EditPage> {
                 onSelected: (value) {
                   if (value == 'export') {
                     _exportToPng(context, frame);
-                  } else if (value == 'fullscreen') {
-                    context.go('/preview/${widget.frameId}');
                   } else if (value == 'import') {
                     _importImage(context);
                   }
                 },
                 itemBuilder: (context) => [
                   const PopupMenuItem(value: 'export', child: Text('Export')),
-                  const PopupMenuItem(value: 'fullscreen', child: Text('Fullscreen Preview')),
                   const PopupMenuItem(value: 'import', child: Text('Import Image')),
                 ],
               ),
@@ -274,9 +268,9 @@ class _EditPageState extends ConsumerState<EditPage> {
                           ? _ExportCanvas(
                               svgString: frame.svgString,
                               importedImageBytes: importedImageBytes,
-                              imageOffset: _imageOffset,
-                              imageScale: _imageScale,
-                              imageRotation: _imageRotation,
+                              imageOffset: imageEditState.offset,
+                              imageScale: imageEditState.scale,
+                              imageRotation: imageEditState.rotation,
                               exportSpec: exportSpec,
                             )
                           : CustomPaint(
@@ -285,16 +279,28 @@ class _EditPageState extends ConsumerState<EditPage> {
                                 fit: StackFit.expand,
                                 children: [
                                   if (importedImageBytes != null)
-                                    Center(
-                                      child: Transform(
-                                        alignment: Alignment.center,
-                                        transform: Matrix4.identity()
-                                          ..translateByDouble(_imageOffset.dx, _imageOffset.dy, 0.0, 1.0)
-                                          ..rotateZ(_imageRotation)
-                                          ..scaleByDouble(_imageScale, _imageScale, 1.0, 1.0),
-                                        child: Image.memory(
-                                          importedImageBytes,
-                                          fit: BoxFit.contain,
+                                    ClipRect(
+                                      child: Center(
+                                        child: Transform(
+                                          alignment: Alignment.center,
+                                          transform: Matrix4.identity()
+                                            ..translateByDouble(
+                                              imageEditState.offset.dx,
+                                              imageEditState.offset.dy,
+                                              0.0,
+                                              1.0,
+                                            )
+                                            ..rotateZ(imageEditState.rotation)
+                                            ..scaleByDouble(
+                                              imageEditState.scale,
+                                              imageEditState.scale,
+                                              1.0,
+                                              1.0,
+                                            ),
+                                          child: Image.memory(
+                                            importedImageBytes,
+                                            fit: BoxFit.contain,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -313,11 +319,12 @@ class _EditPageState extends ConsumerState<EditPage> {
                                               final localFocal = box == null
                                                   ? details.focalPoint
                                                   : box.globalToLocal(details.focalPoint);
+                                              final current = ref.read(imageEditStateProvider);
                                               setState(() {
                                                 _startFocalPoint = localFocal;
-                                                _baseOffset = _imageOffset;
-                                                _baseScale = _imageScale;
-                                                _baseRotation = _imageRotation;
+                                                _baseOffset = current.offset;
+                                                _baseScale = current.scale;
+                                                _baseRotation = current.rotation;
                                               });
                                             },
                                             onScaleUpdate: (details) {
@@ -326,11 +333,15 @@ class _EditPageState extends ConsumerState<EditPage> {
                                                   ? details.focalPoint
                                                   : box.globalToLocal(details.focalPoint);
                                               final delta = localFocal - _startFocalPoint;
-                                              setState(() {
-                                                _imageOffset = _baseOffset + delta;
-                                                _imageScale = (_baseScale * details.scale).clamp(0.2, 10.0);
-                                                _imageRotation = _baseRotation + details.rotation;
-                                              });
+                                              final updatedOffset = _baseOffset + delta;
+                                              final updatedScale = (_baseScale * details.scale).clamp(0.2, 10.0);
+                                              final updatedRotation = _baseRotation + details.rotation;
+                                              final current = ref.read(imageEditStateProvider);
+                                              ref.read(imageEditStateProvider.notifier).state = current.copyWith(
+                                                offset: updatedOffset,
+                                                scale: updatedScale,
+                                                rotation: updatedRotation,
+                                              );
                                             },
                                           );
                                         },
