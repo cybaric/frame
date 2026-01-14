@@ -22,13 +22,12 @@ class MainApp extends StatelessWidget {
           path: '/splash',
           builder: (context, state) => const SplashPage(),
         ),
-        GoRoute(
-          path: '/',
-          builder: (context, state) => const HomePage(),
-        ),
+        GoRoute(path: '/', builder: (context, state) => const HomePage()),
         GoRoute(
           path: '/edit/:id',
-          builder: (context, state) => EditPage(frameId: Uri.decodeComponent(state.pathParameters['id']!)),
+          builder: (context, state) => EditPage(
+            frameId: Uri.decodeComponent(state.pathParameters['id']!),
+          ),
         ),
       ],
     );
@@ -38,14 +37,33 @@ class MainApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0B1220),
+        scaffoldBackgroundColor: const Color(0xFF1E1E2E), // Mocha Base
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFFCBA6F7), // Mocha Mauve
+          secondary: Color(0xFF89B4FA), // Mocha Blue
+          surface: Color(0xFF1E1E2E),
+          surfaceContainerHighest: Color(0xFF313244), // Surface0
+          onSurface: Color(0xFFCDD6F4), // Text
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          titleTextStyle: TextStyle(
+            color: Color(0xFFCDD6F4),
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         snackBarTheme: SnackBarThemeData(
-          backgroundColor: const Color(0xFF0F172A),
-          contentTextStyle: const TextStyle(color: Color(0xFFE2E8F0)),
-          actionTextColor: const Color(0xFF38BDF8),
+          backgroundColor: const Color(0xFF313244),
+          contentTextStyle: const TextStyle(color: Color(0xFFCDD6F4)),
+          actionTextColor: const Color(0xFF89B4FA),
           behavior: SnackBarBehavior.floating,
-          elevation: 8,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       routerConfig: router,

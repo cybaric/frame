@@ -25,14 +25,14 @@ class _SplashPageState extends State<SplashPage> {
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
+          color: theme.scaffoldBackgroundColor,
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF0F172A),
-              Color(0xFF1E293B),
-              Color(0xFF0B1220),
+              theme.scaffoldBackgroundColor,
+              const Color(0xFF181825), // Slightly darker
             ],
           ),
         ),
@@ -44,18 +44,20 @@ class _SplashPageState extends State<SplashPage> {
               Text(
                 'Loading',
                 style: theme.textTheme.headlineMedium?.copyWith(
-                  color: Colors.white,
+                  color: theme.colorScheme.onSurface,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.5,
                 ),
               ),
               const SizedBox(height: 16),
-              const SizedBox(
+              SizedBox(
                 width: 28,
                 height: 28,
                 child: CircularProgressIndicator(
                   strokeWidth: 3,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    theme.colorScheme.primary,
+                  ),
                 ),
               ),
             ],

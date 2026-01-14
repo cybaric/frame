@@ -5,17 +5,40 @@ import 'package:go_router/go_router.dart';
 
 import '../providers/frame_provider.dart';
 
+// Checkerboard painter for transparency background
+class _CheckerboardPainter extends CustomPainter {
+  final double squareSize = 16;
+  final Paint lightPaint = Paint()..color = const Color(0xFFE0E0E0);
+  final Paint darkPaint = Paint()..color = const Color(0xFFC0C0C0);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (double y = 0; y < size.height; y += squareSize) {
+      for (double x = 0; x < size.width; x += squareSize) {
+        final isLight = ((x / squareSize).floor() + (y / squareSize).floor()) % 2 == 0;
+        canvas.drawRect(
+          Rect.fromLTWH(x, y, squareSize, squareSize),
+          isLight ? lightPaint : darkPaint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
   Color _cardColorForIndex(int index) {
     const palette = [
-      Color(0xFF38BDF8),
-      Color(0xFFA78BFA),
-      Color(0xFF34D399),
-      Color(0xFFFBBF24),
-      Color(0xFFFB7185),
-      Color(0xFF60A5FA),
+      Color(0xFFF5C2E7), // Soft Pink
+      Color(0xFFCBA6F7), // Soft Mauve
+      Color(0xFFA6E3A1), // Soft Green
+      Color(0xFFF9E2AF), // Soft Yellow
+      Color(0xFFFAB387), // Soft Peach
+      Color(0xFF89B4FA), // Soft Blue
     ];
     return palette[index % palette.length];
   }
@@ -24,39 +47,37 @@ class HomePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final framesAsync = ref.watch(framesProvider);
 
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0B1220),
-      appBar: AppBar(
-        title: Center(child: const Text('Frame Collection')),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: Colors.white,
-      ),
+      appBar: AppBar(title: const Text('Frame Collection')),
       extendBodyBehindAppBar: true,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF0B1220),
-              Color(0xFF111827),
-              Color(0xFF0F172A),
+              theme.scaffoldBackgroundColor,
+              const Color(0xFF181825), // Slightly darker
             ],
           ),
         ),
         child: SafeArea(
           child: framesAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator(color: Colors.white)),
+            loading: () => const Center(child: CircularProgressIndicator()),
             error: (error, stack) => Center(
               child: Text(
                 'Error: $error',
-                style: const TextStyle(color: Colors.white),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
               ),
             ),
             data: (frames) => GridView.builder(
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
+
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
                 childAspectRatio: 1,
@@ -68,15 +89,16 @@ class HomePage extends ConsumerWidget {
                 final accent = _cardColorForIndex(index);
 
                 return GestureDetector(
-                  onTap: () => context.go('/edit/${Uri.encodeComponent(frame.id)}'),
+                  onTap: () =>
+                      context.go('/edit/${Uri.encodeComponent(frame.id)}'),
                   child: Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(18),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.35),
-                          blurRadius: 18,
-                          offset: const Offset(0, 10),
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
                         ),
                       ],
                     ),
@@ -91,8 +113,8 @@ class HomePage extends ConsumerWidget {
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                                 colors: [
-                                  accent.withValues(alpha: 0.35),
-                                  const Color(0xFF111827),
+                                  accent.withValues(alpha: 0.15),
+                                  theme.colorScheme.surfaceContainerHighest,
                                 ],
                               ),
                             ),
@@ -101,15 +123,26 @@ class HomePage extends ConsumerWidget {
                             padding: const EdgeInsets.all(10),
                             child: DecoratedBox(
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.9),
                                 borderRadius: BorderRadius.circular(14),
                               ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(8),
-                                child: SvgPicture.string(
-                                  frame.svgString,
-                                  fit: BoxFit.contain,
-                                ),
+                              child: Stack(
+                                children: [
+                                  // Checkerboard background
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: CustomPaint(
+                                      size: Size.infinite,
+                                      painter: _CheckerboardPainter(),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(8),
+                                    child: SvgPicture.string(
+                                      frame.svgString,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
